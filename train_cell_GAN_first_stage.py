@@ -18,6 +18,10 @@ from dataloader_zzx import MVTecDataset
 
 from model import ReconstructiveSubNetwork, DiscriminativeSubNetwork
 
+
+""" simple Unet pretraining
+"""
+
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
@@ -139,7 +143,7 @@ def train_on_device(args):
     
     for epoch in range(last_epoch, args.epochs):
         # evaluation(args, model_denoise, model_segment, test_dataloader, epoch, loss_l1, visualizer, run_name)
-        model_1.train()
+        # model_1.train()
         model_2.train()
         loss_list, loss_list_1, loss_list_2 = [], [], []
         best_dice = 0
@@ -150,82 +154,79 @@ def train_on_device(args):
             img_target = img_target.cuda()
             label_target = label_target.cuda()
             
-            img_pred = model_1(label_target)
-            label_pred = model_2(img_pred)
+            # img_pred = model_1(label_target)
+            # label_pred = model_2(img_pred)
+            label_pred = model_2(img_target)
         
-            loss_model_1 = loss_l1(img_pred, img_target)
+            # loss_model_1 = loss_l1(img_pred, img_target)
             # loss_model_2 = loss_l1(label_pred, label_target)
             loss_model_2 = loss_dice(label_pred, label_target)
         
-            save_image(img_target, 'img_target.png')
-            save_image(img_pred, 'img_pred.png')
+            # save_image(img_target, 'img_target.png')
+            # save_image(img_pred, 'img_pred.png')
             save_image(label_pred, 'label_pred.png')
             save_image(label_target, 'label_target.png')
 
-            loss = loss_model_1 + loss_model_2
+            # loss = loss_model_1 + loss_model_2
 
+            loss = loss_model_2
+            
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         
             loss_list.append(loss.item())
-            loss_list_1.append(loss_model_1.item())
-            loss_list_2.append(loss_model_2.item())
+            # loss_list_1.append(loss_model_1.item())
+            # loss_list_2.append(loss_model_2.item())
             
-        print('epoch [{}/{}], loss:{:.4f}, loss_model_1:{:4f}, loss_model_2:{:4f}'.format(args.epochs, epoch, mean(loss_list), mean(loss_list_1), mean(loss_list_2)))
+        print('epoch [{}/{}], loss:{:.4f}'.format(args.epochs, epoch, mean(loss_list)))
 
                 
         if (epoch) % 10 == 0:
-            model_1.eval()
+            # model_1.eval()
             model_2.eval()
             loss_list, loss_list_1, loss_list_2 = [], [], []
             best_dice = 0
         
-            for img_target, label_target in train_dataloader:
+            for img_target, label_target in test_dataloader:
                 
                 img_target = img_target.cuda()
                 label_target = label_target.cuda()
                 
-                img_pred = model_1(label_target)
-                label_pred = model_2(img_pred)
+                # img_pred = model_1(label_target)
+                label_pred = model_2(img_target)
             
-                loss_model_1 = loss_l1(img_pred, img_target)
+                # loss_model_1 = loss_l1(img_pred, img_target)
+                # loss_model_2 = loss_dice(label_pred, label_target)
                 loss_model_2 = loss_dice(label_pred, label_target)
             
                 
-                save_image(img_pred, 'img_pred.png')
-                save_image(label_pred, 'label_pred.png')
+                # save_image(img_pred, 'img_pred.png')
+                save_image(label_pred, 'val_label_pred.png')
+                save_image(label_target, 'val_label_target.png')
 
-                loss = loss_model_1 + loss_model_2
+                # loss = loss_model_1 + loss_model_2
+                loss = loss_model_2
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
             
                 loss_list.append(loss.item())
-                loss_list_1.append(loss_model_1.item())
-                loss_list_2.append(loss_model_2.item())
+                # loss_list_1.append(loss_model_1.item())
+                # loss_list_2.append(loss_model_2.item())
                 
             # print('eval:   epoch [{}/{}], loss:{:.4f}'.format(args.epochs, epoch, mean(loss_list)))
-            print('eval:   epoch [{}/{}], loss:{:.4f}, loss_model_1:{:4f}, loss_model_2:{:4f}'.format(args.epochs, epoch, mean(loss_list), mean(loss_list_1), mean(loss_list_2)))
+            print('eval:   epoch [{}/{}], loss:{:.4f}'.format(args.epochs, epoch, mean(loss_list)))
             
             result_path = os.path.join('/home/zhaoxiang/output', run_name, 'results.txt')
             
             with open(result_path, 'a') as f:
-                f.writelines('Epoch [{}/{}], loss:{:.4f}, loss_model_1:{:4f}, loss_model_2:{:4f}'.format(args.epochs, epoch, mean(loss_list), mean(loss_list_1), mean(loss_list_2)))   
+                f.writelines('Epoch [{}/{}], loss:{:.4f}'.format(args.epochs, epoch, mean(loss_list)))   
             
-            torch.save({'model_1': model_1.state_dict(),
-                        'model_2': model_2.state_dict(),
+            torch.save({'model_2': model_2.state_dict(),
                         'epoch': epoch}, ckp_path)
             
-            # if dice_value > best_dice:
-            #     best_dice = dice_value
-            #     torch.save({'model_denoise': model_denoise.state_dict(),
-            #             'model': model_segment.state_dict(),
-            #             'epoch': epoch,
-            #             'dice': dice_value}, ckp_path.replace('last', 'best'))
-                
-        
         
 
 if __name__=="__main__":
@@ -250,14 +251,14 @@ if __name__=="__main__":
     # need to be changed/checked every time
     parser.add_argument('--bs', default = 16, action='store', type=int)
     parser.add_argument('--gpu_id', default=['0','1'], action='store', type=str, required=False)
-    parser.add_argument('--experiment_name', default='DRAEM_Denoising_reconstruction', choices=['DRAEM_Denoising_reconstruction, liver, brain, head'], action='store')
+    parser.add_argument('--experiment_name', default='Cell_seg_Stage_1', choices=['DRAEM_Denoising_reconstruction, liver, brain, head'], action='store')
     parser.add_argument('--colorRange', default=100, action='store')
     parser.add_argument('--threshold', default=200, action='store')
     parser.add_argument('--dataset_name', default='hist_DIY', choices=['hist_DIY', 'Brain_MRI', 'CovidX', 'RESC_average'], action='store')
     parser.add_argument('--model', default='DRAEM_discriminitive', choices=['ws_skip_connection', 'DRAEM_reconstruction', 'DRAEM_discriminitive'], action='store')
     parser.add_argument('--process_method', default='Gaussian_noise', choices=['none', 'Guassian_noise', 'DRAEM', 'Simplex_noise'], action='store')
     parser.add_argument('--multi_layer', default=False, action='store')
-    parser.add_argument('--resume_training', default=True, action='store')
+    parser.add_argument('--resume_training', default=False, action='store')
     
     args = parser.parse_args()
    

@@ -4,6 +4,7 @@ import os
 import torch
 import glob
 from torchvision.datasets import MNIST, CIFAR10, FashionMNIST, ImageFolder
+import torchvision.transforms.functional as TF
 import numpy as np
 import cv2
 
@@ -93,11 +94,15 @@ class MVTecDataset(torch.utils.data.Dataset):
         self.img_paths = glob.glob(self.img_path + "/*.png")
         self.img_paths.sort()
         
-        train_index = len(self.img_paths)/2 * 1
         
+        # train_index = np.random.rand(len(self.img_paths)) =< 0.8
+        # train_index = random.sample(range(0, len(self.img_paths)), len(self.img_paths)//2)
+        # 
+        random.shuffle(self.img_paths)
+        train_index = len(self.img_paths)/2 * 1
         train_index = int(train_index)
         self.train_img_paths = self.img_paths[:train_index]
-        self.test_img_paths = self.img_paths[train_index:]        
+        self.test_img_paths = self.img_paths[:train_index]        
         
         self.gt_paths = os.listdir(os.path.join(root, 'labels'))
         assert len(self.img_paths) == len(self.gt_paths), "gt and image label numbers don't match!!!"
@@ -114,11 +119,13 @@ class MVTecDataset(torch.utils.data.Dataset):
             self.tot_path = self.train_img_paths
         elif self.phase == 'test':
             self.tot_path = self.test_img_paths
-            
+
+
             
         img_path = self.tot_path[idx]
         img = Image.open(img_path)
         # img = ImageOps.grayscale(img)
+        
         img = self.transform(img)
         
         img_name = (img_path.split('/')[-1]).split('.')[-2]
@@ -128,11 +135,26 @@ class MVTecDataset(torch.utils.data.Dataset):
         label = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)
         
         label = torch.from_numpy(label).type(torch.int64)
-        label = self.gt_transform(label)  
+        
+        # label = self.gt_transform(label)  
         
         
         label_oneHot = torch.nn.functional.one_hot(label, num_classes = 3).permute(2,0,1).type(torch.float32)
-
+        # img = TF.pad(img, padding=0)
+        # label_oneHot= TF.pad(label_oneHot, padding=0)
+        # # img = padding_func(img)
+        # # label_oneHot = padding_func(label_oneHot)
+        
+        # i, j, h, w = transforms.RandomCrop.get_params(
+        #             img, output_size=(256, 256))
+        # img = TF.crop(img, i, j, h, w)
+        # label_oneHot = TF.crop(label_oneHot, i, j, h, w)
+        
+        new_tensor = torch.cat((img, label_oneHot), dim=0)
+        new_tensor = self.gt_transform(new_tensor)
+        img = new_tensor[:3,:,:]
+        label_oneHot = new_tensor[3:,:,:]
+        
         
         # return img, label
         return img, label_oneHot
